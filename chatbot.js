@@ -24,7 +24,7 @@ export async function generate(userMessage) {
       temperature: 0,
       messages: messages,
       model: "openai/gpt-oss-120b",
-      max_completion_tokens: 7800,
+      //   max_completion_tokens: 7800,
       tools: [
         {
           type: "function",
@@ -67,11 +67,13 @@ export async function generate(userMessage) {
 
       if (functionName === "webSearch") {
         const toolResult = await toolWebSearch(JSON.parse(functionArgs))
-
+        console.log("Tool Output : ", toolResult)
+        if (toolResult[0] == "[") continue
+        const cleanedToolResult = toolResult.replace(/\[.*?\]\(.*?\)/g, "")
         messages.push({
           role: "tool",
           tool_call_id: tool.id,
-          content: toolResult,
+          content: cleanedToolResult,
           name: functionName,
         })
         // console.log("Tool Result:", toolResult);
