@@ -67,7 +67,7 @@ export async function generate(userMessage) {
 
       if (functionName === "webSearch") {
         const toolResult = await toolWebSearch(JSON.parse(functionArgs))
-        console.log("Tool Output : ", toolResult)
+        // console.log("Tool Output : ", toolResult)
         if (toolResult[0] == "[") continue
         const cleanedToolResult = toolResult.replace(/\[.*?\]\(.*?\)/g, "")
         messages.push({
