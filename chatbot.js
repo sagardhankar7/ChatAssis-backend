@@ -24,7 +24,7 @@ export async function generate(userMessage) {
       temperature: 0,
       messages: messages,
       model: "openai/gpt-oss-120b",
-      max_completion_tokens: 8192,
+      max_completion_tokens: 7800,
       tools: [
         {
           type: "function",
