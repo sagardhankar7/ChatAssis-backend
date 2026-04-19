@@ -1,0 +1,19 @@
+{
+  "name": "tool-calling",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@tavily/core": "^0.7.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.1.2"
+  }
+}
