@@ -1,10 +1,12 @@
 import Groq from "groq-sdk"
 import { tavily } from "@tavily/core"
+import NodeCache from "node-cache"
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY })
+const serverCache = new NodeCache({ stdTTL: 60 * 60 * 24 }) // 24 HOUR TTL
 
-export async function generate(userMessage) {
+export async function generate(userPrompt, userId) {
   const messages = [
     {
       role: "system",
@@ -14,9 +16,15 @@ export async function generate(userMessage) {
     },
   ]
 
+  //   console.log("USERID: ", userId)
+  //   console.log("CACHE EXIST: ", serverCache.has(userId))
+  if (serverCache.get(userId)) {
+    messages.push(...serverCache.get(userId))
+  }
+
   messages.push({
     role: "user",
-    content: userMessage,
+    content: userPrompt,
   })
 
   while (true) {
@@ -57,6 +65,7 @@ export async function generate(userMessage) {
 
     if (!toolCalls) {
       // ai generated answer by itself without need of tool call
+      serverCache.set(userId, messages)
       return chatCompletion.choices[0].message.content
     }
 
@@ -67,9 +76,11 @@ export async function generate(userMessage) {
 
       if (functionName === "webSearch") {
         const toolResult = await toolWebSearch(JSON.parse(functionArgs))
-        // console.log("Tool Output : ", toolResult)
         if (toolResult[0] == "[") continue
         const cleanedToolResult = toolResult.replace(/\[.*?\]\(.*?\)/g, "")
+
+        // console.log("Tool Output : ", cleanedToolResult)
+
         messages.push({
           role: "tool",
           tool_call_id: tool.id,
@@ -85,7 +96,7 @@ export async function generate(userMessage) {
 async function toolWebSearch({ query }) {
   //   console.log("Calling Tool: toolWebSearch", query);
   const response = await tvly.search(query, {
-    maxResults: 3,
+    maxResults: 5,
   })
 
   const finalResponse = response.results

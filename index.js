@@ -12,9 +12,9 @@ app.get("/", (req, res) => {
 })
 
 app.post("/chat", async (req, res) => {
-  const { userPrompt } = req.body
+  const { userPrompt, userId } = req.body
 
-  const result = await generate(userPrompt)
+  const result = await generate(userPrompt, userId)
 
   res.json({
     message: result,

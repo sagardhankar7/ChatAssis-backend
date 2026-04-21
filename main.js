@@ -1,15 +1,15 @@
-import Groq from "groq-sdk";
-import { tavily } from "@tavily/core";
-import readline from "node:readline/promises";
+import Groq from "groq-sdk"
+import { tavily } from "@tavily/core"
+import readline from "node:readline/promises"
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY })
 
 async function main() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-  });
+  })
 
   const messages = [
     {
@@ -18,16 +18,16 @@ async function main() {
           You have access to following tools:
           1. webSearch({query} : {query: string}) //Search the latest information and realtime data on internet`,
     },
-  ];
+  ]
 
   while (true) {
-    const question = await rl.question("You: ");
-    if (question == "exit") break;
+    const question = await rl.question("You: ")
+    if (question == "exit") break
 
     messages.push({
       role: "user",
       content: question,
-    });
+    })
 
     while (true) {
       const chatCompletion = await groq.chat.completions.create({
@@ -54,13 +54,31 @@ async function main() {
               },
             },
           },
+          {
+            type: "function",
+            function: {
+              name: "extractWebs",
+              description: "Extract the text from the website and Show Summary",
+              parameters: {
+                // JSON Schema object
+                type: "object",
+                properties: {
+                  link: {
+                    type: "string",
+                    description: "The website link",
+                  },
+                },
+                required: ["link"],
+              },
+            },
+          },
         ],
         tool_choice: "auto",
-      });
+      })
 
-      messages.push(chatCompletion.choices[0].message);
+      messages.push(chatCompletion.choices[0].message)
 
-      const toolCalls = chatCompletion.choices[0]?.message.tool_calls;
+      const toolCalls = chatCompletion.choices[0]?.message.tool_calls
 
       //   Handle Tool Call
 
@@ -69,45 +87,62 @@ async function main() {
         console.log(
           "Assistant: ",
           JSON.stringify(chatCompletion.choices[0].message.content),
-        );
-        break;
+        )
+        break
       }
 
       for (const tool of toolCalls) {
-        console.log("tool: ", tool);
-        const functionName = tool.function.name;
-        const functionArgs = tool.function.arguments;
+        console.log("tool: ", tool)
+        const functionName = tool.function.name
+        const functionArgs = tool.function.arguments
 
         if (functionName === "webSearch") {
-          const toolResult = await toolWebSearch(JSON.parse(functionArgs));
+          const toolResult = await toolWebSearch(JSON.parse(functionArgs))
 
           messages.push({
             role: "tool",
             tool_call_id: tool.id,
             content: toolResult,
             name: functionName,
-          });
+          })
           // console.log("Tool Result:", toolResult);
+        }
+
+        if (functionName === "extractWebs") {
+          const toolResult = await toolExtractWebsite(JSON.parse(functionArgs))
+
+          messages.push({
+            role: "tool",
+            tool_call_id: tool.id,
+            content: toolResult,
+            name: functionName,
+          })
         }
       }
     }
   }
 
-  rl.close();
+  rl.close()
 
   //   console.log(JSON.stringify(chatCompletion.choices[0]?.message || ""));
+}
+
+async function toolExtractWebsite({ link }) {
+  const response = await tvly.extract(link)
+
+  return JSON.stringify(response)
 }
 
 async function toolWebSearch({ query }) {
   //   console.log("Calling Tool: toolWebSearch", query);
   const response = await tvly.search(query, {
     maxResults: 3,
-  });
+  })
 
   const finalResponse = response.results
     .map((result) => result.content.slice(0, 5000))
-    .join("\n\n");
-  return finalResponse;
+    .join("\n\n")
+  return finalResponse
 }
 
-main();
+main()
