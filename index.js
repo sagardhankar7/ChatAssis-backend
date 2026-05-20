@@ -55,7 +55,7 @@ app.post("/chat", upload.single("file"), async (req, res) => {
     response = result
   }
 
-//   console.log("Sending response: ", response)
+  //   console.log("Sending response: ", response)
   res.json({
     message: response,
   })
