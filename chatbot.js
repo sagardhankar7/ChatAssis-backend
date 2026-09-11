@@ -7,7 +7,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY })
 const serverCache = new NodeCache({ stdTTL: 60 * 60 * 24 }) // 24 HOUR TTL
 
-export async function generate(userPrompt, userId) {
+export async function generate(userPrompt, userId, chat_id) {
   const messages = [
     {
       role: "system",
@@ -19,8 +19,8 @@ export async function generate(userPrompt, userId) {
 
   //   console.log("USERID: ", userId)
   //   console.log("CACHE EXIST: ", serverCache.has(userId))
-  if (serverCache.get(userId)) {
-    messages.push(...serverCache.get(userId))
+  if (serverCache.get(chat_id)) {
+    messages.push(...serverCache.get(chat_id))
   }
 
   messages.push({
@@ -66,7 +66,7 @@ export async function generate(userPrompt, userId) {
 
     if (!toolCalls) {
       // ai generated answer by itself without need of tool call
-      serverCache.set(userId, messages)
+      serverCache.set(chat_id, messages)
       return chatCompletion.choices[0].message.content
     }
 
@@ -88,6 +88,8 @@ export async function generate(userPrompt, userId) {
           content: cleanedToolResult,
           name: functionName,
         })
+
+        serverCache.set(chat_id, messages)
         // console.log("Tool Result:", toolResult);
       }
     }
