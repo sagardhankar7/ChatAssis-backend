@@ -18,11 +18,23 @@ const pinecone = new PineconeClient({
 })
 const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME)
 
-export const vectorStore = new PineconeStore(embeddings, {
-  pineconeIndex,
-  maxConcurrency: 5, // 5 API calls to the vector store parallel (rate limit applied)
-})
-export async function indexTheDocument(filePath) {
+export const getVectorStore = (namespace) => {
+  return new PineconeStore(embeddings, {
+    pineconeIndex,
+    namespace: namespace, // EDIT: Namespace is now safely bound to this specific instance
+    maxConcurrency: 5,
+  })
+}
+
+// export const vectorStore = new PineconeStore(
+//     embeddings, {
+//   pineconeIndex,
+//   maxConcurrency: 5, // 5 API calls to the vector store parallel (rate limit applied)
+// })
+export async function indexTheDocument(filePath, userId, chat_id) {
+  const namespace = `user_${userId}`;
+
+
   const loader = new PDFLoader(filePath, { splitPages: false })
   const doc = await loader.load()
   const loadedText = doc[0].pageContent
@@ -35,11 +47,37 @@ export async function indexTheDocument(filePath) {
   const textchunks = await textsplitter.splitText(loadedText)
   console.log("Chunk length =", textchunks.length)
 
+
   // Milestone: creating embedding for chunks
   //  Milestone: creating vector database to store vector embeddings
+  console.log("1. Starting embedding + Pinecone");
+
+  const documents = textchunks.map(text => ({
+    pageContent: text,
+    metadata: { // tag each chunk with userid and chatid
+      userId: String(userId),
+      chatId: String(chat_id)
+    }
+  }));
+
+  console.log("2. Documents prepared:", documents.length);
+
+  // const testEmbedding = await embeddings.embedQuery("hello world");
+
+  // console.log(
+  //     "Embedding API works. Dimensions:",
+  //     testEmbedding.length
+  // );
+
+
+
+
+  console.log("3. Calling Pinecone addDocuments");
+
+  const vectorStore = getVectorStore(namespace)
+
 
   // Store
-  await vectorStore.addDocuments(
-    textchunks.map((text) => ({ pageContent: text })),
-  )
+  await vectorStore.addDocuments( documents)
+  console.log("4. Pinecone addDocuments DONE");
 }

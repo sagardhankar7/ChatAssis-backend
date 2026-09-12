@@ -2,8 +2,9 @@ import express, { response } from "express"
 import { generate } from "./chatbot.js"
 import cors from "cors"
 import multer from "multer"
+import fs from "fs"
 import path from "path"
-import { indexTheDocument, vectorStore } from "./PdfAi.js"
+import {getVectorStore, indexTheDocument} from "./PdfAi.js"
 import OpenAI from "openai"
 import NodeCache from "node-cache";
 import {promptTitleFinder} from "./promptTitleFinder.js";
@@ -11,9 +12,14 @@ const db = new NodeCache({ stdTTL: 60 * 60 * 24 }) // 24 HOUR TTL
 const userChatRoutes = new NodeCache({ stdTTL: 60 * 60 * 24 })
 const routeTitleDB = new NodeCache({ stdTTL: 60 * 60 * 24 })
 const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
+  apiKey: process.env["GROQ_API_KEY"],
   baseURL: "https://api.groq.com/openai/v1",
 })
+
+const uploadDir = "uploads"
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+}
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -38,6 +44,7 @@ app.get("/", (req, res) => {
 })
 
 app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
+
   const {chat_id} = req.params
   console.log(req.file) // uploaded file
   const { userPrompt, userId , isHistory, currentChatId} = req.body
@@ -62,19 +69,44 @@ app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
   chat.push(userInput)
   let response = ""
   if (req.file) {
-    // console.log("File uploaded: ", req.file.path)
+    // let defaultPrompt = "Give me the details"
+    // if(userPrompt) {
+    //   defaultPrompt = userPrompt
+    // }
+    console.log("File : ", req.file.path)
     const filePath = path.join(process.cwd(), req.file.path)
-    await indexTheDocument(filePath)
-    const results = await vectorStore.similaritySearchWithScore(userPrompt)
-    const texts = results.map(([document, score]) => document.pageContent)
-    const result = await client.responses.create({
+    await indexTheDocument(filePath, userId, chat_id)
+    const namespace = `user_${userId}`
+    const vectorStore = getVectorStore(namespace);
+    const results = await vectorStore.similaritySearchWithScore(userPrompt?userPrompt:"give me general details",4,
+        {
+      namespace : `user_${userId}`,
+      chatId:  String(chat_id)
+    })
+    const texts = results.map(([document, score]) => {
+      console.log("score:", score, "text:", document.pageContent)
+      return document.pageContent
+    })
+    const completion  = await client.chat.completions.create({
       model: "openai/gpt-oss-20b",
       temperature: 0.1,
-      input: `Get answer to the question ${userPrompt} from the texts ${texts.join("\n\n")}. If you dont know the answer , simply tell - I dont know.`,
+      messages: [
+        {
+          role: "system",
+          content:
+              "Answer from the provided context."
+        },
+        {
+          role: "user",
+          content: `Context:\n${texts.join("\n\n")}\n\nQuestion: ${userPrompt ? userPrompt : "give me general details"}`
+        }
+      ]
     })
-    console.log(JSON.stringify(result, null, 2))
+    console.log(JSON.stringify(completion, null, 2))
     // response = result.text
-    response = result.output_text || "No response generated"
+    response = completion.choices[0].message.content;
+    const responseObj = {"message": response, "position": "left"}
+    db.set(chat_id, [...chat, responseObj])
   }
   else {
     if(isHistory) {
@@ -98,7 +130,7 @@ app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
 
   res.json({
     message: response,
-    historyLinks: userChatRoutes.get(userId),
+    historyLinks: userChatRoutes.get(userId ? userId : "1"),
     routeTitleMap: cacheToJSON(routeTitleDB)
   })
 })
