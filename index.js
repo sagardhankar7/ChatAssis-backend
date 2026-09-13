@@ -38,6 +38,10 @@ const app = express()
 
 app.use(express.json())
 app.use(cors())
+app.use(cors({
+  origin: ['https://chat-assis-frontend.vercel.app/*', 'http://localhost:5173/*'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+}));
 
 app.get("/", (req, res) => {
   res.send("Hello World")
