@@ -59,11 +59,12 @@ app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
 
     const {chat_id} = req.params
     console.log(req.file) // uploaded file
-    const { userId, isHistory, currentChatId} = req.body
+    const { userId, currentChatId} = req.body
+    const isHistory = req.body.isHistory === "true";
 
     let userPrompt
     try {
-      userPrompt = req.body.userPrompt ? JSON.parse(req.body.userPrompt) : null
+      userPrompt = JSON.parse(req.body.userPrompt)
       console.log(userPrompt)
     } catch (e) {
       return res.status(400).json({ error: "Invalid userPrompt format" })
