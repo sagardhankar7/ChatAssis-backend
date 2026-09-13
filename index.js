@@ -99,7 +99,7 @@ app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
       //   defaultPrompt = userPrompt
       // }
       console.log("File : ", req.file.path)
-      const filePath = path.join(process.cwd(), req.file.path)
+      const filePath =  req.file.path
       try {
         await indexTheDocument(filePath, userId, chat_id)
         const namespace = `user_${userId}`
