@@ -2,7 +2,7 @@ import Groq from "groq-sdk";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
-export async function promptTitleFinder(userPrompt) {
+export async function promptTitleFinder(userPromptMessage) {
     const messages = [
         {
             role: "system",
@@ -14,7 +14,7 @@ export async function promptTitleFinder(userPrompt) {
 
     messages.push({
         role: "user",
-        content: userPrompt,
+        content: userPromptMessage
     })
 
     const chatCompletion = await groq.chat.completions.create({

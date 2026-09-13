@@ -7,7 +7,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY })
 const serverCache = new NodeCache({ stdTTL: 60 * 60 * 24 }) // 24 HOUR TTL
 
-export async function generate(userPrompt, userId, chat_id) {
+export async function generate(userPromptMessage, userId, chat_id) {
   const messages = [
     {
       role: "system",
@@ -25,7 +25,7 @@ export async function generate(userPrompt, userId, chat_id) {
 
   messages.push({
     role: "user",
-    content: userPrompt,
+    content: userPromptMessage,
   })
 
   while (true) {

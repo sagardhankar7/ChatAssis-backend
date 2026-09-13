@@ -15,8 +15,12 @@ const client = new OpenAI({
   apiKey: process.env["GROQ_API_KEY"],
   baseURL: "https://api.groq.com/openai/v1",
 })
+import os from "os"
+import {v4 as uuid} from "uuid"
 
-const uploadDir = "uploads"
+// const uploadDir = "uploads"
+const uploadDir = path.join(os.tmpdir(), "uploads")
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true })
 }
@@ -36,12 +40,14 @@ const upload = multer({ storage })
 
 const app = express()
 
-app.use(express.json())
-app.use(cors())
+
+// app.use(cors())
 app.use(cors({
-  origin: ['https://chat-assis-frontend.vercel.app/*', 'http://localhost:5173/*'],
+  origin: ['https://chat-assis-frontend.vercel.app', 'http://localhost:5173'],
   methods: ['GET', 'POST', 'OPTIONS'],
 }));
+
+app.use(express.json())
 
 app.get("/", (req, res) => {
   res.send("Hello World")
@@ -49,94 +55,119 @@ app.get("/", (req, res) => {
 
 app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
 
-  const {chat_id} = req.params
-  console.log(req.file) // uploaded file
-  const { userPrompt, userId , isHistory, currentChatId} = req.body
+  try {
 
-  if(userPrompt && currentChatId && typeof routeTitleDB.get(currentChatId) != "string") {
-    console.log("Calling Title Assumer : ")
-    const title = await promptTitleFinder(userPrompt)
-    routeTitleDB.set(currentChatId, title)
-  }
-  if(currentChatId) {
-    let routes = userChatRoutes.get(userId)
-    if(!routes) {
-      userChatRoutes.set(userId, [])
-      routes = []
+    const {chat_id} = req.params
+    console.log(req.file) // uploaded file
+    const { userId, isHistory, currentChatId} = req.body
+
+    let userPrompt
+    try {
+      userPrompt = req.body.userPrompt ? JSON.parse(req.body.userPrompt) : null
+      console.log(userPrompt)
+    } catch (e) {
+      return res.status(400).json({ error: "Invalid userPrompt format" })
     }
-    if(!routes.includes(currentChatId)) {
-      userChatRoutes.set(userId, [...routes, currentChatId])
+
+    // if(!userPrompt || !userPrompt.message) return res.json({message: "Message not received"})
+
+
+    if (userPrompt.message !==''  && currentChatId && typeof routeTitleDB.get(currentChatId) != "string") {
+      console.log("Calling Title Assumer : ")
+      const title = await promptTitleFinder(userPrompt.message)
+      routeTitleDB.set(currentChatId, title)
     }
-  }
-  const chat = db.get(chat_id) || []
-  const userInput = {"message": userPrompt, "position": "right"}
-  chat.push(userInput)
-  let response = ""
-  if (req.file) {
-    // let defaultPrompt = "Give me the details"
-    // if(userPrompt) {
-    //   defaultPrompt = userPrompt
-    // }
-    console.log("File : ", req.file.path)
-    const filePath = path.join(process.cwd(), req.file.path)
-    await indexTheDocument(filePath, userId, chat_id)
-    const namespace = `user_${userId}`
-    const vectorStore = getVectorStore(namespace);
-    const results = await vectorStore.similaritySearchWithScore(userPrompt?userPrompt:"give me general details",4,
-        {
-      namespace : `user_${userId}`,
-      chatId:  String(chat_id)
-    })
-    const texts = results.map(([document, score]) => {
-      console.log("score:", score, "text:", document.pageContent)
-      return document.pageContent
-    })
-    const completion  = await client.chat.completions.create({
-      model: "openai/gpt-oss-20b",
-      temperature: 0.1,
-      messages: [
-        {
-          role: "system",
-          content:
-              "Answer from the provided context."
-        },
-        {
-          role: "user",
-          content: `Context:\n${texts.join("\n\n")}\n\nQuestion: ${userPrompt ? userPrompt : "give me general details"}`
-        }
-      ]
-    })
-    console.log(JSON.stringify(completion, null, 2))
-    // response = result.text
-    response = completion.choices[0].message.content;
-    const responseObj = {"message": response, "position": "left"}
+    if (currentChatId) {
+      let routes = userChatRoutes.get(userId)
+      if (!routes) {
+        userChatRoutes.set(userId, [])
+        routes = []
+      }
+      if (!routes.includes(currentChatId)) {
+        userChatRoutes.set(userId, [...routes, currentChatId])
+      }
+    }
+    const chat = db.get(chat_id) || []
+    // const userInput = {"message": userPrompt.message, "position": "right"}
+
+    chat.push(userPrompt)
+    let response = ""
+    if (req.file) {
+      // let defaultPrompt = "Give me the details"
+      // if(userPrompt) {
+      //   defaultPrompt = userPrompt
+      // }
+      console.log("File : ", req.file.path)
+      const filePath = path.join(process.cwd(), req.file.path)
+      try {
+        await indexTheDocument(filePath, userId, chat_id)
+        const namespace = `user_${userId}`
+        const vectorStore = getVectorStore(namespace);
+        const results = await vectorStore.similaritySearchWithScore(userPrompt ? userPrompt.message : "give me general details", 4,
+            {
+              namespace: `user_${userId}`,
+              chatId: String(chat_id)
+            })
+        const texts = results.map(([document, score]) => {
+          console.log("score:", score, "text:", document.pageContent)
+          return document.pageContent
+        })
+        const completion = await client.chat.completions.create({
+          model: "openai/gpt-oss-20b",
+          temperature: 0.1,
+          messages: [
+            {
+              role: "system",
+              content:
+                  "Answer from the provided context."
+            },
+            {
+              role: "user",
+              content: `Context:\n${texts.join("\n\n")}\n\nQuestion: ${userPrompt?.message ? userPrompt.message : "give me general details"}`
+            }
+          ]
+        })
+        console.log(JSON.stringify(completion, null, 2))
+        // response = result.text
+        response = completion.choices[0].message.content;
+        const responseId = uuid()
+        const responseObj = {"message": response, "id": responseId, "position": "left"}
+        db.set(chat_id, [...chat, responseObj])
+      }finally {
+        fs.unlink(filePath, (err) => {
+          if (err) console.error("Failed to delete uploaded file:", filePath, err)
+          else console.log("Deleted uploaded file:", filePath)
+        })
+      }
+    } else {
+      if (isHistory) {
+        const arr = db.get(chat_id)
+        return res.json({
+          historyLinks: userChatRoutes.get(userId) || [],
+          chatArr: arr || [{"message": "No data", "position": "no"}],
+          routeTitleMap: cacheToJSON(routeTitleDB)
+        })
+      } else {
+        const result = await generate(userPrompt.message, userId, chat_id)
+        response = result
+      }
+    }
+
+    //   console.log("Sending response: ", response)
+    const responseId = uuid()
+    const responseObj = {"message": response, "id": responseId, "position": "left"}
     db.set(chat_id, [...chat, responseObj])
-  }
-  else {
-    if(isHistory) {
-      const arr = db.get(chat_id)
-      return res.json({
-        historyLinks: userChatRoutes.get(userId) || [],
-        chatArr: arr || [{"message": "No data", "position": "no"}],
-        routeTitleMap: cacheToJSON(routeTitleDB)
-      })
-    }
-    else {
-      const result = await generate(userPrompt, userId, chat_id)
-      response = result
-    }
-  }
+    // chatHistory.set(userId, )
 
-  //   console.log("Sending response: ", response)
-  const responseObj = {"message": response, "position": "left"}
-  db.set(chat_id, [...chat, responseObj])
-  // chatHistory.set(userId, )
-
-  res.json({
-    message: response,
-    historyLinks: userChatRoutes.get(userId ? userId : "1"),
-    routeTitleMap: cacheToJSON(routeTitleDB)
-  })
+    res.json({
+      message: response,
+      id: responseId,
+      historyLinks: userChatRoutes.get(userId ? userId : "1"),
+      routeTitleMap: cacheToJSON(routeTitleDB)
+    })
+  }catch (error) {
+    console.log("Error in the server,", error)
+  }
 })
 
 function cacheToJSON(cache) {
