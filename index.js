@@ -62,18 +62,19 @@ app.post("/chat/:chat_id", upload.single("file"), async (req, res) => {
     const { userId, currentChatId} = req.body
     const isHistory = req.body.isHistory === "true";
 
-    let userPrompt
-    try {
-      userPrompt = JSON.parse(req.body.userPrompt)
-      console.log(userPrompt)
-    } catch (e) {
-      return res.status(400).json({ error: "Invalid userPrompt format" })
+    let userPrompt = null
+    if(req.body.userPrompt) {
+      try {
+        userPrompt = JSON.parse(req.body.userPrompt)
+        console.log(userPrompt)
+      } catch (e) {
+        return res.status(400).json({ error: "Invalid userPrompt format" })
+      }
     }
-
     // if(!userPrompt || !userPrompt.message) return res.json({message: "Message not received"})
 
 
-    if (userPrompt.message !==''  && currentChatId && typeof routeTitleDB.get(currentChatId) != "string") {
+    if (userPrompt?.message  && currentChatId && typeof routeTitleDB.get(currentChatId) != "string") {
       console.log("Calling Title Assumer : ")
       const title = await promptTitleFinder(userPrompt.message)
       routeTitleDB.set(currentChatId, title)
